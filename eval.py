@@ -5,6 +5,7 @@ import os
 import logging
 import argparse
 import json, re
+from datetime import datetime
 
 sys.path.append('.')
 
@@ -46,6 +47,8 @@ def write_coco_json(human, image_w, image_h):
 if __name__ == '__main__':
 
     # TODO : Scales
+    if not os.path.exists(config.EVAL.eval_path):
+                os.mkdir(config.EVAL.eval_path)
 
     image_dir = os.path.join(config.DATA.data_path, 'mscoco%s' % config.DATA.coco_version, 'val%s' % config.DATA.coco_version)
     coco_json_file = os.path.join(config.DATA.data_path, 'mscoco%s' % config.DATA.coco_version, 'annotations/person_keypoints_val%s.json' % config.DATA.coco_version)
@@ -99,10 +102,10 @@ if __name__ == '__main__':
                 for h in humans:
                     logger.info(h)
         if config.EVAL.plot:
-            plot_humans(image, heatMap, pafMap, humans, '%06d' % (img_idx+1))
+            plot_humans(image, heatMap, pafMap, humans, '%06d' % (img_idx+1), os.path.join(config.EVAL.eval_path, config.LOG.vis_path))
 
-    write_json = 'eval.json'
-    fp = open(write_json, 'w')
+    write_json = os.path.join(config.EVAL.eval_path, 'eval.json')
+    fp = open(write_json, 'w+')
     json.dump(result, fp)
     fp.close()
 
@@ -112,3 +115,11 @@ if __name__ == '__main__':
     cocoEval.evaluate()
     cocoEval.accumulate()
     cocoEval.summarize()
+
+    write_txt = os.path.join(config.EVAL.eval_path, 'eval.txt')
+    today=datetime.now()
+    f=open(write_txt, 'a+')
+    f.write("--------------------Evaluation-------------------\r\n")
+    f.write(str(cocoEval.stats) + " " + str(today)+"\r\n")
+    f.write("-------------------------------------------------\r\n")
+    f.close()
