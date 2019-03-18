@@ -25,7 +25,9 @@ class TfPoseEstimator:
         self._warm_up(graph_path)
 
     def _warm_up(self, graph_path):
-        self.persistent_sess = tf.InteractiveSession()
+        config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=True)
+        config.gpu_options.allow_growth = True
+        self.persistent_sess = tf.Session(config=config)
         self.persistent_sess.run(tf.global_variables_initializer())
         tl.files.load_and_assign_npz_dict(graph_path, self.persistent_sess)
 
