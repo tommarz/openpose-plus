@@ -1,6 +1,6 @@
 from enum import Enum
 import time
-from distutils.dir_util import mkpath
+import os
 
 import numpy as np
 import tensorflow as tf
@@ -225,7 +225,7 @@ def draw_humans(npimg, humans):
     return npimg
 
 
-def plot_humans(image, heatMat, pafMat, humans, name):
+def plot_humans(image, heatMat, pafMat, humans, name, path):
     import matplotlib.pyplot as plt
     fig = plt.figure()
     a = fig.add_subplot(2, 3, 1)
@@ -250,8 +250,10 @@ def plot_humans(image, heatMat, pafMat, humans, name):
     a.set_title('Vectormap-y')
     plt.imshow(tmp2_even, cmap=plt.cm.gray, alpha=0.5)
     plt.colorbar()
-    mkpath('vis')
-    plt.savefig('vis/result-%s.png' % name)
+    if not os.path.exists(path):
+                os.mkdir(path)
+    plt_path = os.path.join(path, 'result-%s.png' % name)
+    plt.savefig(plt_path)
 
 
 def rename_tensor(x, name):

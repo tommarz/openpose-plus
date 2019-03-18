@@ -55,7 +55,7 @@ def inference(path_to_freezed_model, input_files):
         if humans:
             for h in humans:
                 print(h)
-        plot_humans(image, heatMap, pafMap, humans, '%02d' % (idx + 1))
+        plot_humans(image, heatMap, pafMap, humans, '%02d' % (idx + 1),'inferece')
 
 
 def parse_args():
