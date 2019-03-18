@@ -39,3 +39,5 @@ test.py
 Testing
 third_party
 venv
+models/
+.vscode/
