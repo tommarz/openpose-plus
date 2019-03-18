@@ -35,7 +35,7 @@ def inference(base_model_name, path_to_npz, data_format, input_files, plot):
         if plot:
             if data_format == 'channels_first':
                 image = image.transpose([1, 2, 0])
-            plot_humans(image, heatMap, pafMap, humans, '%02d' % (idx + 1))
+            plot_humans(image, heatMap, pafMap, humans, '%02d' % (idx + 1),'inferece')
     tot = time.time() - t0
     mean = tot / len(input_files)
     tl.logging.info('inference all took: %f, mean: %f, FPS: %f' % (tot, mean, 1.0 / mean))
