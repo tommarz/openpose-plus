@@ -51,6 +51,8 @@ win = config.MODEL.win
 hout = config.MODEL.hout
 wout = config.MODEL.wout
 
+tensorboard = True
+
 
 def get_pose_data_list(im_path, ann_path):
     """
@@ -141,9 +143,9 @@ def _data_aug_fn(image, ground_truth):
     # # random left-right flipping
     # image, annos, mask_miss = tl.prepro.keypoint_random_flip(image, annos, mask_miss, prob=0.5)# removed hao
 
-    M_rotate = tl.prepro.affine_rotation_matrix(angle=(-30, 30))  # original paper: -40~40
+    M_rotate = tl.prepro.affine_rotation_matrix(angle=(-40, 40))  # original paper: -40~40
     # M_flip = tl.prepro.affine_horizontal_flip_matrix(prob=0.5) # hao removed: bug, keypoints will have error
-    M_zoom = tl.prepro.affine_zoom_matrix(zoom_range=(0.5, 0.8))  # original paper: 0.5~1.1
+    M_zoom = tl.prepro.affine_zoom_matrix(zoom_range=(0.5, 1.1))  # original paper: 0.5~1.1
     # M_shear = tl.prepro.affine_shear_matrix(x_shear=(-0.1, 0.1), y_shear=(-0.1, 0.1))
     M_combined = M_rotate.dot(M_zoom)
     # M_combined = M_rotate.dot(M_flip).dot(M_zoom)#.dot(M_shear)
@@ -320,6 +322,8 @@ def parallel_train(training_dataset):
     # net.m2 = m2                 # mask2, GT
     stage_losses = net.stage_losses
     l2_loss = net.l2_loss
+    temp_tot_loss, temp_l2_loss = 0,0
+
 
     global_step = tf.Variable(1, trainable=False)
     # scaled_lr = lr_init * hvd.size()  # Horovod: scale the learning rate linearly
@@ -350,6 +354,21 @@ def parallel_train(training_dataset):
 
     # Start training
     with tf.Session(config=config) as sess:
+        if tensorboard:
+
+            if not os.path.exists('summaries'):
+                os.mkdir('summaries')
+            if not os.path.exists(os.path.join('summaries', 'first')):
+                os.mkdir(os.path.join('summaries', 'first'))
+
+            summ_writer = tf.summary.FileWriter(os.path.join('summaries', 'first'), sess.graph)
+
+            tf.summary.scalar('total_loss', total_loss)
+            tf.summary.scalar('l2_loss', l2_loss)
+            merge = tf.summary.merge_all()
+
+
+
         init.run()
         bcast.run()  # Horovod
         print('Worker{}: Initialized'.format(hvd.rank()))
@@ -376,6 +395,11 @@ def parallel_train(training_dataset):
 
             [_, _loss, _stage_losses, _l2, conf_result, paf_result] = \
                 sess.run([train_op, total_loss, stage_losses, l2_loss, last_conf, last_paf])
+
+            if tensorboard:
+                summ = sess.run(merge)
+                summ_writer.add_summary(summ, step)
+
 
             # tstring = time.strftime('%d-%m %H:%M:%S', time.localtime(time.time()))
             lr = sess.run(lr_v)
