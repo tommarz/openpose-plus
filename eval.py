@@ -8,6 +8,7 @@ import json, re
 from datetime import datetime
 
 sys.path.append('.')
+sys.setrecursionlimit(5000)# FIX: a lot of plots would lead to error-maximum-recursion-depth-exceeded
 
 from openpose_plus.inference.common import measure, plot_humans, read_imgfile
 from openpose_plus.inference.estimator import TfPoseEstimator
