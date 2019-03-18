@@ -254,6 +254,7 @@ def plot_humans(image, heatMat, pafMat, humans, name, path):
                 os.mkdir(path)
     plt_path = os.path.join(path, 'result-%s.png' % name)
     plt.savefig(plt_path)
+    plt.close(fig) # FIX: a lot of plots would lead to error-maximum-recursion-depth-exceeded
 
 
 def rename_tensor(x, name):

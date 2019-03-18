@@ -8,6 +8,7 @@ import json, re
 from datetime import datetime
 
 sys.path.append('.')
+sys.setrecursionlimit(5000)# FIX: a lot of plots would lead to error-maximum-recursion-depth-exceeded
 
 from openpose_plus.inference.common import measure, plot_humans, read_imgfile
 from openpose_plus.inference.estimator import TfPoseEstimator
@@ -79,7 +80,7 @@ if __name__ == '__main__':
             sys.exit(-1)
 
         # inference the image with the specified network
-        humans, heatMap, pafMap = estimator.inference(image)
+        humans, heatMap, pafMap = estimator.inference(image) #paf_process is needed install script in scripts
 
         scores = 0
         ann_idx = cocoGt.getAnnIds(imgIds=[img_idx], catIds=[1])
