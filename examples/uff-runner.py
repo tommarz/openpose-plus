@@ -17,6 +17,7 @@ from tensorrt.parsers import uffparser
 from inference.common import measure, plot_humans, read_imgfile
 from inference.post_process import PostProcessor
 from models import _input_image, get_model
+from train_config import config
 
 tf.logging.set_verbosity(tf.logging.DEBUG)
 tl.logging.set_verbosity(tl.logging.DEBUG)
@@ -145,7 +146,7 @@ def main():
         conf, paf = measure(lambda: infer(engine, x, 1), 'infer')
         humans, heat_up, paf_up = measure(lambda: post_process(conf, paf), 'post_process')
         print('got %d humans' % (len(humans)))
-        plot_humans(x.transpose([1, 2, 0]), heat_up, paf_up, humans, '%02d' % (idx + 1))
+        plot_humans(x.transpose([1, 2, 0]), heat_up, paf_up, humans, '%02d' % (idx + 1),config.LOG.vis_path)
 
 
 main()
