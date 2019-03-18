@@ -80,7 +80,7 @@ if __name__ == '__main__':
             sys.exit(-1)
 
         # inference the image with the specified network
-        humans, heatMap, pafMap = estimator.inference(image)
+        humans, heatMap, pafMap = estimator.inference(image) #paf_process is needed install script in scripts
 
         scores = 0
         ann_idx = cocoGt.getAnnIds(imgIds=[img_idx], catIds=[1])
