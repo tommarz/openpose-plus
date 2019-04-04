@@ -3,12 +3,12 @@ set -e
 
 cd $(dirname $0)/..
 
-MODEL_DIR=${HOME}/Downloads
+MODEL_DIR=.
 
-DATA_FORMAT=channels_first # Must use channels_first
+DATA_FORMAT=channels_last # Must use channels_first
 
-height=256
-width=384
+height=368
+width=368
 
 export_uff() {
     local base_model=$1
@@ -28,8 +28,10 @@ export_uff() {
 
 # export_uff vgg vgg450000_no_cpm.npz vgg.uff
 # export_uff vggtiny new-models/hao18/pose350000.npz vggtiny.uff
-export_uff hao28_experimental hao28/pose345000.npz hao28-${height}x${width}.uff
-export_uff hao28_experimental pose600000.npz hao28-600000-${height}x${width}.uff
+#export_uff hao28_experimental hao28/pose345000.npz hao28-${height}x${width}.uff
+#export_uff hao28_experimental pose600000.npz hao28-600000-${height}x${width}.uff
+export_uff mobilenet pose75000.npz pose_mobilenet-75000-${height}x${width}.uff
+
 
 # TODO: make mobilenet support NCHW
 # export_uff mobilenet mbn280000.npz mobilenet.uff

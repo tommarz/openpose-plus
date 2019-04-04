@@ -44,10 +44,12 @@ def export_model(model_func, checkpoint_dir, path_to_npz, graph_filename, uff_fi
     model_parameters = model_func()
     names = [p.name[:-2] for p in model_parameters]
     print('name: %s' % ','.join(names))
+    config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
 
-    with tf.Session() as sess:
+    with tf.Session(config=config) as sess:
         sess.run(tf.global_variables_initializer())
-        measure(lambda: tl.files.load_and_assign_npz_dict(path_to_npz, sess), 'load npz')
+        measure(lambda: tl.files.load_and_assign_npz_dict(sess=sess, name=path_to_npz), 'load npz')
+
 
         if graph_filename:
             measure(lambda: save_graph(sess, checkpoint_dir, graph_filename), 'save_graph')
