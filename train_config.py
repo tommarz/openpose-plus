@@ -43,7 +43,7 @@ config.EVAL.model = 'pose.npz'
 config.EVAL.eval_path = 'eval'
 config.EVAL.data_idx = -1 # data_idx >= 0 to use specified data
 config.EVAL.eval_size = -1 # use first eval_size elements to evaluate, only when data_idx < 0
-config.EVAL.plot = True
+config.EVAL.plot = False
 
 
 # config.VALID = edict()
