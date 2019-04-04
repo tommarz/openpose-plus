@@ -39,7 +39,7 @@ def get_model(base_model_name):
 
     def model_func(target_size, data_format):
         base_model = get_base_model(base_model_name)
-        n_pos = 19
+        n_pos = config.MODEL.n_pos
         image = _input_image(target_size[1], target_size[0], data_format, 'image')
         _, b1_list, b2_list, _ = base_model(image, n_pos, None, None, False, False, data_format=data_format)
         conf_tensor = b1_list[-1].outputs
