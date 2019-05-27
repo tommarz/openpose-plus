@@ -4,6 +4,7 @@ import math
 import multiprocessing
 import os
 import time
+import datetime
 import sys
 
 import cv2
@@ -91,8 +92,8 @@ def make_model(img, results, mask, is_train=True, reuse=False):
         loss_l2 = tf.nn.l2_loss((l2.outputs - pafs) * m2)
 
         losses.append(tf.reduce_mean([loss_l1, loss_l2]))
-        stage_losses.append(loss_l1 / batch_size)
-        stage_losses.append(loss_l2 / batch_size)
+        stage_losses.append(loss_l1 / config.TRAIN.batch_size)
+        stage_losses.append(loss_l2 / config.TRAIN.batch_size)
 
     last_conf = b1_list[-1].outputs
     last_paf = b2_list[-1].outputs
@@ -102,7 +103,7 @@ def make_model(img, results, mask, is_train=True, reuse=False):
 
     for p in tl.layers.get_variables_with_name('kernel', True, True):
         l2_loss += tf.contrib.layers.l2_regularizer(weight_decay_factor)(p)
-    total_loss = tf.reduce_sum(losses) / batch_size + l2_loss
+    total_loss = tf.reduce_sum(losses) / config.TRAIN.batch_size + l2_loss
 
     log_tensors = {'total_loss': total_loss, 'stage_losses': stage_losses, 'l2_loss': l2_loss}
     net.cnn = cnn
@@ -143,7 +144,7 @@ def _data_aug_fn(image, ground_truth):
     # # random left-right flipping
     # image, annos, mask_miss = tl.prepro.keypoint_random_flip(image, annos, mask_miss, prob=0.5)# removed hao
 
-    M_rotate = tl.prepro.affine_rotation_matrix(angle=(-40, 40))  # original paper: -40~40
+    M_rotate = tl.prepro.affine_rotation_matrix(angle=(-180, 180))  # original paper: -40~40
     # M_flip = tl.prepro.affine_horizontal_flip_matrix(prob=0.5) # hao removed: bug, keypoints will have error
     M_zoom = tl.prepro.affine_zoom_matrix(zoom_range=(0.5, 1.1))  # original paper: 0.5~1.1
     # M_shear = tl.prepro.affine_shear_matrix(x_shear=(-0.1, 0.1), y_shear=(-0.1, 0.1))
@@ -208,7 +209,7 @@ def single_train(training_dataset):
     ds = training_dataset.shuffle(buffer_size=4096)  # shuffle before loading images
     ds = ds.repeat(n_epoch)
     ds = ds.map(_map_fn, num_parallel_calls=multiprocessing.cpu_count() // 2)  # decouple the heavy map_fn
-    ds = ds.batch(batch_size)  # TODO: consider using tf.contrib.map_and_batch
+    ds = ds.batch(config.TRAIN.batch_size)  # TODO: consider using tf.contrib.map_and_batch
     ds = ds.prefetch(2)
     iterator = ds.make_one_shot_iterator()
     one_element = iterator.get_next()
@@ -222,27 +223,51 @@ def single_train(training_dataset):
     # net.m2 = m2                 # mask2, GT
     stage_losses = net.stage_losses
     l2_loss = net.l2_loss
+    temp_tot_loss, temp_l2_loss = (float("inf"),float("inf"))
 
     global_step = tf.Variable(1, trainable=False)
     print('Start - n_step: {} batch_size: {} lr_init: {} lr_decay_every_step: {}'.format(
-        n_step, batch_size, lr_init, lr_decay_every_step))
+        n_step, config.TRAIN.batch_size, lr_init, lr_decay_every_step))
     with tf.variable_scope('learning_rate'):
         lr_v = tf.Variable(lr_init, trainable=False)
 
     opt = tf.train.MomentumOptimizer(lr_v, 0.9)
     train_op = opt.minimize(total_loss, global_step=global_step)
-    config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
+    tfconfig = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
 
     # start training
-    with tf.Session(config=config) as sess:
+    with tf.Session(config=tfconfig) as sess:
         sess.run(tf.global_variables_initializer())
+
+        if tensorboard:
+
+            if not os.path.exists('summaries'):
+                os.mkdir('summaries')
+            if not os.path.exists(os.path.join('summaries', 'first')):
+                os.mkdir(os.path.join('summaries', 'first'))
+
+            summ_writer = tf.summary.FileWriter(os.path.join('summaries', 'run'+str(datetime.datetime.now())), sess.graph)
+
+            tf.summary.scalar('total_loss', total_loss)
+            tf.summary.scalar('l2_loss', l2_loss)
+
+            for ix, ll in enumerate(stage_losses):
+                tf.summary.scalar('stage{}_loss'.format(ix), ll)
+            merge = tf.summary.merge_all()
 
         # restore pre-trained weights
         try:
             # tl.files.load_and_assign_npz(sess, os.path.join(model_path, 'pose.npz'), net)
-            tl.files.load_and_assign_npz_dict(sess=sess, name=os.path.join(model_path, 'pose.npz'))
+            tl.files.load_and_assign_npz_dict(sess=sess, name=os.path.join(model_path, config.MODEL.model_file))
         except:
             print("no pre-trained model")
+        
+        if config.MODEL.initial_weights:
+            # restore pre-trained mobilnet weights
+            try:
+                tl.files.load_and_assign_npz_dict(sess=sess, name=os.path.join(model_path, config.MODEL.initial_weights_file))
+            except:
+                print("no pre-trained mobilnet model")
 
         # train until the end
         sess.run(tf.assign(lr_v, lr_init))
@@ -263,6 +288,26 @@ def single_train(training_dataset):
                 time.time() - tic))
             for ix, ll in enumerate(_stage_losses):
                 print('Network#', ix, 'For Branch', ix % 2 + 1, 'Loss:', ll)
+            
+            if temp_tot_loss > _loss:
+                temp_tot_loss = _loss
+                # save some results
+                [img_out, confs_ground, pafs_ground, conf_result, paf_result,
+                    mask_out] = sess.run([x_, confs_, pafs_, last_conf, last_paf, mask])
+                draw_results(img_out, confs_ground, conf_result, pafs_ground, paf_result, mask_out,
+                    'train_best_%d_' % step)
+
+                # save model
+                # tl.files.save_npz(
+                #    net.all_params, os.path.join(model_path, 'pose' + str(step) + '.npz'), sess=sess)
+                # tl.files.save_npz(net.all_params, os.path.join(model_path, 'pose.npz'), sess=sess)
+                tl.files.save_npz_dict(
+                    net.all_params, os.path.join(model_path, 'pose_best.npz'), sess=sess)
+
+
+            if tensorboard:
+                summ = sess.run(merge)
+                summ_writer.add_summary(summ, step)
 
             # save intermediate results and model
             if (step != 0) and (step % save_interval == 0):
@@ -275,7 +320,7 @@ def single_train(training_dataset):
                 #    net.all_params, os.path.join(model_path, 'pose' + str(step) + '.npz'), sess=sess)
                 # tl.files.save_npz(net.all_params, os.path.join(model_path, 'pose.npz'), sess=sess)
                 tl.files.save_npz_dict(net.all_params, os.path.join(model_path, 'pose' + str(step) + '.npz'), sess=sess)
-                tl.files.save_npz_dict(net.all_params, os.path.join(model_path, 'pose.npz'), sess=sess)
+                tl.files.save_npz_dict(net.all_params, os.path.join(model_path, config.MODEL.model_file), sess=sess)
             if step == n_step:  # training finished
                 break
 
@@ -307,7 +352,7 @@ def parallel_train(training_dataset):
     ds = ds.shard(num_shards=hvd.size(), index=hvd.rank())
     ds = ds.repeat(n_epoch)
     ds = ds.map(_map_fn, num_parallel_calls=4)
-    ds = ds.batch(batch_size)
+    ds = ds.batch(config.TRAIN.batch_size)
     ds = ds.prefetch(buffer_size=1)
 
     iterator = ds.make_one_shot_iterator()
@@ -322,11 +367,12 @@ def parallel_train(training_dataset):
     # net.m2 = m2                 # mask2, GT
     stage_losses = net.stage_losses
     l2_loss = net.l2_loss
-    temp_tot_loss, temp_l2_loss = 0,0
+    temp_tot_loss, temp_l2_loss = (float("inf"),float("inf"))
 
 
     global_step = tf.Variable(1, trainable=False)
-    # scaled_lr = lr_init * hvd.size()  # Horovod: scale the learning rate linearly
+    # TODO
+    # scaled_lr = lr_init * hvd.size()  # Horovod: scale the learning rate linearly 
     scaled_lr = lr_init  # Linear scaling rule is not working in openpose training.
     with tf.variable_scope('learning_rate'):
         lr_v = tf.Variable(scaled_lr, trainable=False)
@@ -334,10 +380,10 @@ def parallel_train(training_dataset):
     opt = tf.train.MomentumOptimizer(lr_v, 0.9)
     opt = hvd.DistributedOptimizer(opt)  # Horovod
     train_op = opt.minimize(total_loss, global_step=global_step)
-    config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
+    tfconfig = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
 
-    config.gpu_options.allow_growth = True  # Horovod
-    config.gpu_options.visible_device_list = str(hvd.local_rank())  # Horovod
+    tfconfig.gpu_options.allow_growth = True  # Horovod
+    tfconfig.gpu_options.visible_device_list = str(hvd.local_rank())  # Horovod
 
     # Add variable initializer.
     init = tf.global_variables_initializer()
@@ -353,34 +399,45 @@ def parallel_train(training_dataset):
     lr_decay_every_step = lr_decay_every_step // hvd.size() + 1  # Horovod
 
     # Start training
-    with tf.Session(config=config) as sess:
+    with tf.Session(config=tfconfig) as sess:
         if tensorboard:
+            if hvd.rank() == 0:
 
-            if not os.path.exists('summaries'):
-                os.mkdir('summaries')
-            if not os.path.exists(os.path.join('summaries', 'first')):
-                os.mkdir(os.path.join('summaries', 'first'))
+                if not os.path.exists('summaries'):
+                    os.mkdir('summaries')
 
-            summ_writer = tf.summary.FileWriter(os.path.join('summaries', 'first'), sess.graph)
+                summ_writer = tf.summary.FileWriter(os.path.join('summaries', 'run'+str(datetime.datetime.now())), sess.graph)
 
             tf.summary.scalar('total_loss', total_loss)
             tf.summary.scalar('l2_loss', l2_loss)
+
+            for ix, ll in enumerate(stage_losses):
+                tf.summary.scalar('stage{}_loss'.format(ix), ll)
             merge = tf.summary.merge_all()
 
-
-
+        #Init model and load weights
         init.run()
-        bcast.run()  # Horovod
+
+        #TODO
+        if hvd.rank() == 0:  # Horovod
+            # restore pre-trained weights
+            try:
+                # tl.files.load_and_assign_npz(sess, os.path.join(model_path, 'pose.npz'), net)
+                tl.files.load_and_assign_npz_dict(sess=sess, name=os.path.join(model_path, config.MODEL.model_file))
+            except:
+                print("no pre-trained model")
+        
+            if config.MODEL.initial_weights:
+                # restore pre-trained mobilnet weights
+                try:
+                    tl.files.load_and_assign_npz_dict(sess=sess, name=os.path.join(model_path, config.MODEL.initial_weights_file))
+                except:
+                    print("no pre-trained mobilnet model")
+
+        bcast.run()  # Horovod bcast vars across workers
         print('Worker{}: Initialized'.format(hvd.rank()))
         print('Worker{}: Start - n_step: {} batch_size: {} lr_init: {} lr_decay_every_step: {}'.format(
-            hvd.rank(), n_step, batch_size, lr_init, lr_decay_every_step))
-
-        # restore pre-trained weights
-        try:
-            # tl.files.load_and_assign_npz(sess, os.path.join(model_path, 'pose.npz'), net)
-            tl.files.load_and_assign_npz_dict(sess=sess, name=os.path.join(model_path, 'pose.npz'))
-        except:
-            print("no pre-trained model")
+            hvd.rank(), n_step, config.TRAIN.batch_size, lr_init, lr_decay_every_step))
 
         # train until the end
         while True:
@@ -396,10 +453,6 @@ def parallel_train(training_dataset):
             [_, _loss, _stage_losses, _l2, conf_result, paf_result] = \
                 sess.run([train_op, total_loss, stage_losses, l2_loss, last_conf, last_paf])
 
-            if tensorboard:
-                summ = sess.run(merge)
-                summ_writer.add_summary(summ, step)
-
 
             # tstring = time.strftime('%d-%m %H:%M:%S', time.localtime(time.time()))
             lr = sess.run(lr_v)
@@ -412,6 +465,25 @@ def parallel_train(training_dataset):
 
             # save intermediate results and model
             if hvd.rank() == 0:  # Horovod
+                if temp_tot_loss > _loss:
+                    temp_tot_loss = _loss
+                    # save some results
+                    [img_out, confs_ground, pafs_ground, conf_result, paf_result,
+                     mask_out] = sess.run([x_, confs_, pafs_, last_conf, last_paf, mask])
+                    draw_results(img_out, confs_ground, conf_result, pafs_ground, paf_result, mask_out,
+                                 'train_best_%d_' % step)
+
+                    # save model
+                    # tl.files.save_npz(
+                    #    net.all_params, os.path.join(model_path, 'pose' + str(step) + '.npz'), sess=sess)
+                    # tl.files.save_npz(net.all_params, os.path.join(model_path, 'pose.npz'), sess=sess)
+                    tl.files.save_npz_dict(
+                        net.all_params, os.path.join(model_path, 'pose_best.npz'), sess=sess)
+
+                if tensorboard:
+                    summ = sess.run(merge)
+                    summ_writer.add_summary(summ, step)
+
                 if (step != 0) and (step % save_interval == 0):
                     # save some results
                     [img_out, confs_ground, pafs_ground, conf_result, paf_result,
@@ -425,7 +497,7 @@ def parallel_train(training_dataset):
                     # tl.files.save_npz(net.all_params, os.path.join(model_path, 'pose.npz'), sess=sess)
                     tl.files.save_npz_dict(
                         net.all_params, os.path.join(model_path, 'pose' + str(step) + '.npz'), sess=sess)
-                    tl.files.save_npz_dict(net.all_params, os.path.join(model_path, 'pose.npz'), sess=sess)
+                    tl.files.save_npz_dict(net.all_params, os.path.join(model_path, config.MODEL.model_file), sess=sess)
 
 
 if __name__ == '__main__':
@@ -488,7 +560,7 @@ if __name__ == '__main__':
         for _input, _target in zip(imgs_file_list, train_targets):
             yield _input.encode('utf-8'), cPickle.dumps(_target)
 
-    n_epoch = math.ceil(n_step / (len(imgs_file_list) / batch_size))
+    n_epoch = math.ceil(n_step / (len(imgs_file_list) / config.TRAIN.batch_size))
     dataset = tf.data.Dataset().from_generator(generator, output_types=(tf.string, tf.string))
 
     if config.TRAIN.train_mode == 'single':
