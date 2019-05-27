@@ -697,6 +697,7 @@ def draw_results(images, heats_ground, heats_result, pafs_ground, pafs_result, m
 
         mkpath(config.LOG.vis_path)
         plt.savefig(os.path.join(config.LOG.vis_path, '%s%d.png' % (name, i)), dpi=300)
+        plt.close(fig)
 
 
 def vis_annos(image, annos, name=''):
