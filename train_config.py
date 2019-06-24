@@ -10,18 +10,20 @@ config.TRAIN.save_interval = 2500
 config.TRAIN.log_interval = 10
 #config.TRAIN.n_epoch = #10
 config.TRAIN.n_step = 600000  # total number of step
-config.TRAIN.lr_init = 4e-5  #4e-5 # initial learning rate
+config.TRAIN.lr_init = 1.641157e-07  #4e-5 # initial learning rate
 config.TRAIN.lr_decay_every_step = 100000  # evey number of step to decay lr
 config.TRAIN.lr_decay_factor = 0.333  # decay lr factor
 config.TRAIN.weight_decay_factor = 5e-4#5e-4
 config.TRAIN.train_mode = 'parallel'  # single, parallel
+config.TRAIN.train_batch_norm = False  # should bn layers be trained or kept
+config.TRAIN.shuffel_buffer_size = 10000
 
 config.MODEL = edict()
 config.MODEL.model_path = 'models'  # save directory
 config.MODEL.model_file = 'pose.npz'  # save file
 config.MODEL.n_pos = 19  # number of keypoints + 1 for background
-config.MODEL.hin = 368  # input size during training , 240
-config.MODEL.win = 368
+config.MODEL.hin = 368#256  # input size during training , 240
+config.MODEL.win = 368#384
 config.MODEL.hout = int(config.MODEL.hin / 8)  # output size during training (default 46)
 config.MODEL.wout = int(config.MODEL.win / 8)
 config.MODEL.name = 'hao28_experimental'  # vgg, vggtiny, mobilenet,hao28_experimental
@@ -49,13 +51,3 @@ config.EVAL.eval_path = 'eval'
 config.EVAL.data_idx = -1 # data_idx >= 0 to use specified data
 config.EVAL.eval_size = -1 # use first eval_size elements to evaluate, only when data_idx < 0
 config.EVAL.plot = False
-
-
-# config.VALID = edict()
-
-# import json
-# def log_config(filename, cfg):
-#     with open(filename, 'w') as f:
-#         f.write("================================================\n")
-#         f.write(json.dumps(cfg, indent=4))
-#         f.write("\n================================================\n")
