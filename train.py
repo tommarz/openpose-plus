@@ -47,10 +47,6 @@ lr_decay_factor = config.TRAIN.lr_decay_factor
 # define hyper-parameters for model
 model_path = config.MODEL.model_path
 n_pos = config.MODEL.n_pos
-hin = config.MODEL.hin
-win = config.MODEL.win
-hout = config.MODEL.hout
-wout = config.MODEL.wout
 
 tensorboard = True
 
