@@ -9,10 +9,12 @@ __all__ = ['model']
 W_init = tf.truncated_normal_initializer(stddev=0.01)
 # b_init = None # tf.constant_initializer(value=0.0)
 b_init2 = tf.constant_initializer(value=0.0)
+
+#TODO put this in training config it is mutch to low
 decay = 0.999
 
 
-def model(x, n_pos, mask_miss1, mask_miss2, is_train=False, reuse=None, data_format='channels_last'):
+def model(x, n_pos, mask_miss1, mask_miss2, is_train=False, train_bn = False, reuse=None, data_format='channels_last'):
     """Defines the entire pose estimation model."""
 
     def _conv2d(x, c, filter_size, strides, act, padding, name):
@@ -29,7 +31,7 @@ def model(x, n_pos, mask_miss1, mask_miss2, is_train=False, reuse=None, data_for
     def bn(x, name):
         return BatchNormLayer(
             x,
-            is_train=is_train,
+            is_train=train_bn,
             act=tf.nn.relu,
             decay=decay,
             name=name,
@@ -165,6 +167,7 @@ def model(x, n_pos, mask_miss1, mask_miss2, is_train=False, reuse=None, data_for
 
         # stage 2~6
         # for i in range(2, 7): # [2, 3, 4, 5, 6]
+        #TODO not all stages?
         for i in [5, 6]:
             b1, b2 = stage(cnn, b1_list[-1], b2_list[-1], n_pos, mask_miss1, mask_miss2, is_train, name='stage%d' % i)
             b1_list.append(b1)

@@ -11,7 +11,7 @@ W_init = tf.contrib.layers.xavier_initializer()  # tf.truncated_normal_initializ
 b_init = tf.constant_initializer(value=0.0)
 
 
-def model(x, n_pos, mask_miss1, mask_miss2, is_train=False, reuse=None, data_format='channels_last'):
+def model(x, n_pos, mask_miss1, mask_miss2, is_train=False, train_bn = False, reuse=None, data_format='channels_last'):
     """Defines the entire pose estimation model."""
 
     def _conv2d(x, c, filter_size, strides, act, padding, name):
