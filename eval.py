@@ -64,7 +64,7 @@ if __name__ == '__main__':
         keys = [keys[config.EVAL.data_idx]]
     logger.info('validation %s set size=%d' % (coco_json_file, len(keys)))
 
-    height, width = (config.MODEL.win, config.MODEL.hin)
+    height, width = (config.MODEL.hin, config.MODEL.win)
     model_func = get_model(config.MODEL.name)
     estimator = TfPoseEstimator(os.path.join(config.MODEL.model_path, config.EVAL.model), model_func, target_size=(width, height))
 
@@ -85,7 +85,7 @@ if __name__ == '__main__':
         scores = 0
         ann_idx = cocoGt.getAnnIds(imgIds=[img_idx], catIds=[1])
         anns = cocoGt.loadAnns(ann_idx)
-        for human in humans:
+        for human in humans: 
             item = {
                 'image_id': img_idx,
                 'category_id': 1,
