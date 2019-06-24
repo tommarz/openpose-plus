@@ -115,6 +115,48 @@ def make_model(img, results, mask, is_train=True, train_bn = True, reuse=False):
     return net, total_loss, log_tensors
     # return total_loss, last_conf, stage_losses, l2_loss, cnn, last_paf, img, confs, pafs, m1, net
 
+def _mock_data_aug_fn(image, ground_truth):
+    """Data augmentation function."""
+    ground_truth = cPickle.loads(ground_truth)
+    ground_truth = list(ground_truth)
+
+    annos = ground_truth[0]
+    mask = ground_truth[1]
+    h_mask, w_mask, _ = np.shape(image)
+
+    # mask
+    mask_miss = np.ones((h_mask, w_mask), dtype=np.uint8)
+
+    for seg in mask:
+        bin_mask = maskUtils.decode(seg)
+        bin_mask = np.logical_not(bin_mask)
+        mask_miss = np.bitwise_and(mask_miss, bin_mask)
+
+    # random crop
+    #TODO only working with quadradic dimmentions
+    image, annos, mask_miss = tl.prepro.keypoint_resize_random_crop(image, annos, mask_miss, size=(config.MODEL.hin, config.MODEL.win)) # hao add
+
+    # generate result maps including keypoints heatmap, pafs and mask
+    height, width, _ = np.shape(image)
+
+    heatmap = get_heatmap(annos, height, width)
+    vectormap = get_vectormap(annos, height, width)
+    resultmap = np.concatenate((heatmap, vectormap), axis=2)
+
+    image = np.array(image, dtype=np.float32)
+
+    #TODO image has not always the right size if  256 * 384 is requested
+    print("image1 ",height, width, _)
+    print("mask1 ",mask_miss.shape)
+
+    # mask image in all 3 channels
+    img_mask = mask_miss.reshape(height, width, 1)
+    image = image * np.repeat(img_mask, 3, 2)
+
+    resultmap = np.array(resultmap, dtype=np.float32)
+    mask_miss = cv2.resize(mask_miss, (config.MODEL.hout, config.MODEL.wout), interpolation=cv2.INTER_AREA)
+    mask_miss = np.array(mask_miss, dtype=np.float32)
+    return image, resultmap, mask_miss
 
 def _data_aug_fn(image, ground_truth):
     """Data augmentation function."""
@@ -124,8 +166,13 @@ def _data_aug_fn(image, ground_truth):
     annos = ground_truth[0]
     mask = ground_truth[1]
     h_mask, w_mask, _ = np.shape(image)
+
     # mask
     mask_miss = np.ones((h_mask, w_mask), dtype=np.uint8)
+    
+    #TODO only working with quadradic dimmentions
+    #print("image0 ",h_mask, w_mask, _)
+    #print("mask0 ",mask_miss.shape)
 
     for seg in mask:
         bin_mask = maskUtils.decode(seg)
@@ -148,6 +195,7 @@ def _data_aug_fn(image, ground_truth):
     # M_combined = M_rotate.dot(M_flip).dot(M_zoom)#.dot(M_shear)
     # M_combined = tl.prepro.affine_zoom_matrix(zoom_range=0.9) # for debug
     h, w, _ = image.shape
+
     transform_matrix = tl.prepro.transform_matrix_offset_center(M_combined, x=w, y=h)
     image = tl.prepro.affine_transform_cv2(image, transform_matrix)
     mask_miss = tl.prepro.affine_transform_cv2(mask_miss, transform_matrix, border_mode='replicate')
@@ -156,28 +204,45 @@ def _data_aug_fn(image, ground_truth):
     # random resize height and width together
     # image, annos, mask_miss = tl.prepro.keypoint_random_resize_shortestedge(
     #     image, annos, mask_miss, min_size=(hin, win), zoom_range=(0.95, 1.6)) # removed hao
-    # random crop
-    # image, annos, mask_miss = tl.prepro.keypoint_random_crop(image, annos, mask_miss, size=(hin, win))  # with padding # removed hao
-
     image, annos, mask_miss = tl.prepro.keypoint_random_flip(image, annos, mask_miss, prob=0.5)
-    image, annos, mask_miss = tl.prepro.keypoint_resize_random_crop(image, annos, mask_miss, size=(hin, win)) # hao add
+    
+    # random crop
+    #TODO only working with quadradic dimmentions
+    image, annos, mask_miss = tl.prepro.keypoint_resize_random_crop(image, annos, mask_miss, size=(config.MODEL.hin, config.MODEL.win)) # hao add
 
     # generate result maps including keypoints heatmap, pafs and mask
-    h, w, _ = np.shape(image)
     height, width, _ = np.shape(image)
+
     heatmap = get_heatmap(annos, height, width)
     vectormap = get_vectormap(annos, height, width)
     resultmap = np.concatenate((heatmap, vectormap), axis=2)
 
     image = np.array(image, dtype=np.float32)
 
-    img_mask = mask_miss.reshape(hin, win, 1)
+    #TODO image has not always the right size if  256 * 384 is requested
+    #print("image1 ",height, width, _)
+    #print("mask1 ",mask_miss.shape)
+
+    # mask image in all 3 channels
+    img_mask = mask_miss.reshape(height, width, 1)
     image = image * np.repeat(img_mask, 3, 2)
 
     resultmap = np.array(resultmap, dtype=np.float32)
-    mask_miss = cv2.resize(mask_miss, (hout, wout), interpolation=cv2.INTER_AREA)
+    mask_miss = cv2.resize(mask_miss, (config.MODEL.hout, config.MODEL.wout), interpolation=cv2.INTER_AREA)
     mask_miss = np.array(mask_miss, dtype=np.float32)
     return image, resultmap, mask_miss
+
+def _mock_map_fn(img_list, annos):
+    """TF Dataset pipeline."""
+    image = tf.read_file(img_list)
+    image = tf.image.decode_jpeg(image, channels=3)  # get RGB with 0~1
+    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+
+    image = np.ones((config.MODEL.hin, config.MODEL.win, 3), dtype=np.float32)
+    resultmap = np.ones((config.MODEL.hout, config.MODEL.wout, 57), dtype=np.float32)
+    mask = np.ones((config.MODEL.hout, config.MODEL.wout, 1), dtype=np.float32)
+
+    return image, resultmap, mask
 
 
 def _map_fn(img_list, annos):
@@ -186,11 +251,15 @@ def _map_fn(img_list, annos):
     image = tf.image.decode_jpeg(image, channels=3)  # get RGB with 0~1
     image = tf.image.convert_image_dtype(image, dtype=tf.float32)
     # Affine transform and get paf maps
+    #image, resultmap, mask = tf.py_func(_data_aug_fn, [image, annos], [tf.float32, tf.float32, tf.float32])
     image, resultmap, mask = tf.py_func(_data_aug_fn, [image, annos], [tf.float32, tf.float32, tf.float32])
 
-    image = tf.reshape(image, [hin, win, 3])
-    resultmap = tf.reshape(resultmap, [hout, wout, n_pos * 3])
-    mask = tf.reshape(mask, [hout, wout, 1])
+    #TODO also reshape here?? why?
+    image = tf.reshape(image, [config.MODEL.hin, config.MODEL.win, 3])
+    #only here reshape ?
+    resultmap = tf.reshape(resultmap, [config.MODEL.hout, config.MODEL.wout, n_pos * 3])
+
+    mask = tf.reshape(mask, [config.MODEL.hout, config.MODEL.wout, 1])
 
     image = tf.image.random_brightness(image, max_delta=45./255.)   # 64./255. 32./255.)  caffe -30~50
     image = tf.image.random_contrast(image, lower=0.5, upper=1.5)   # lower=0.2, upper=1.8)  caffe 0.3~1.5
@@ -202,14 +271,14 @@ def _map_fn(img_list, annos):
 
 
 def single_train(training_dataset):
-    ds = training_dataset.shuffle(buffer_size=4096)  # shuffle before loading images
+    ds = training_dataset.shuffle(buffer_size=config.TRAIN.shuffel_buffer_size)  # shuffle before loading images
     ds = ds.repeat(n_epoch)
-    ds = ds.map(_map_fn, num_parallel_calls=multiprocessing.cpu_count() // 2)  # decouple the heavy map_fn
+    ds = ds.map(_map_fn, num_parallel_calls=max(1,multiprocessing.cpu_count() -1))  # decouple the heavy map_fn
     ds = ds.batch(config.TRAIN.batch_size)  # TODO: consider using tf.contrib.map_and_batch
-    ds = ds.prefetch(2)
+    ds = ds.prefetch(buffer_size=3)
     iterator = ds.make_one_shot_iterator()
     one_element = iterator.get_next()
-    net, total_loss, log_tensors = make_model(*one_element, is_train=True, reuse=False)
+    net, total_loss, log_tensors = make_model(*one_element, is_train=True, train_bn=config.TRAIN.train_batch_norm, reuse=False)
     x_ = net.img  # net input
     last_conf = net.last_conf  # net output
     last_paf = net.last_paf  # net output
@@ -239,8 +308,6 @@ def single_train(training_dataset):
 
             if not os.path.exists('summaries'):
                 os.mkdir('summaries')
-            if not os.path.exists(os.path.join('summaries', 'first')):
-                os.mkdir(os.path.join('summaries', 'first'))
 
             summ_writer = tf.summary.FileWriter(os.path.join('summaries', 'run'+str(datetime.datetime.now())), sess.graph)
 
@@ -273,6 +340,12 @@ def single_train(training_dataset):
             if step != 0 and (step % lr_decay_every_step == 0):
                 new_lr_decay = lr_decay_factor**(step // lr_decay_every_step)
                 sess.run(tf.assign(lr_v, lr_init * new_lr_decay))
+            
+            # TODO Test images
+            #print("save test image")
+            #[img_out, confs_ground, pafs_ground, conf_result, paf_result,
+            #     mask_out] = sess.run([x_, confs_, pafs_, last_conf, last_paf, mask])
+            #draw_results(img_out, confs_ground, conf_result, pafs_ground, paf_result, mask_out, 'train_test_%d_' % step)
 
             [_, _loss, _stage_losses, _l2, conf_result, paf_result] = \
                 sess.run([train_op, total_loss, stage_losses, l2_loss, last_conf, last_paf])
@@ -291,14 +364,10 @@ def single_train(training_dataset):
                 [img_out, confs_ground, pafs_ground, conf_result, paf_result,
                     mask_out] = sess.run([x_, confs_, pafs_, last_conf, last_paf, mask])
                 draw_results(img_out, confs_ground, conf_result, pafs_ground, paf_result, mask_out,
-                    'train_best_%d_' % step)
-
-                # save model
-                # tl.files.save_npz(
-                #    net.all_params, os.path.join(model_path, 'pose' + str(step) + '.npz'), sess=sess)
-                # tl.files.save_npz(net.all_params, os.path.join(model_path, 'pose.npz'), sess=sess)
+                    'train_best_{}_{}_'.format(step,_loss))
+                
                 tl.files.save_npz_dict(
-                    net.all_params, os.path.join(model_path, 'pose_best.npz'), sess=sess)
+                    net.all_params, os.path.join(model_path, 'pose_best_{}_{}_'.format(step,_loss)  ), sess=sess)
 
 
             if tensorboard:
@@ -311,27 +380,12 @@ def single_train(training_dataset):
                 [img_out, confs_ground, pafs_ground, conf_result, paf_result,
                  mask_out] = sess.run([x_, confs_, pafs_, last_conf, last_paf, mask])
                 draw_results(img_out, confs_ground, conf_result, pafs_ground, paf_result, mask_out, 'train_%d_' % step)
+                
                 # save model
-                # tl.files.save_npz(
-                #    net.all_params, os.path.join(model_path, 'pose' + str(step) + '.npz'), sess=sess)
-                # tl.files.save_npz(net.all_params, os.path.join(model_path, 'pose.npz'), sess=sess)
                 tl.files.save_npz_dict(net.all_params, os.path.join(model_path, 'pose' + str(step) + '.npz'), sess=sess)
                 tl.files.save_npz_dict(net.all_params, os.path.join(model_path, config.MODEL.model_file), sess=sess)
             if step == n_step:  # training finished
                 break
-
-
-def _mock_map_fn(img_list, annos):
-    """TF Dataset pipeline."""
-    image = tf.read_file(img_list)
-    image = tf.image.decode_jpeg(image, channels=3)  # get RGB with 0~1
-    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
-
-    image = np.ones((hin, win, 3), dtype=np.float32)
-    resultmap = np.ones((hout, wout, 57), dtype=np.float32)
-    mask = np.ones((hout, wout, 1), dtype=np.float32)
-
-    return image, resultmap, mask
 
 
 def _parallel_train_model(img, results, mask):
@@ -344,16 +398,16 @@ def parallel_train(training_dataset):
 
     hvd.init()  # Horovod
 
-    ds = training_dataset.shuffle(buffer_size=4096)
+    ds = training_dataset.shuffle(buffer_size=config.TRAIN.shuffel_buffer_size)
     ds = ds.shard(num_shards=hvd.size(), index=hvd.rank())
     ds = ds.repeat(n_epoch)
-    ds = ds.map(_map_fn, num_parallel_calls=4)
+    ds = ds.map(_map_fn, num_parallel_calls=max(1,multiprocessing.cpu_count() -1))
     ds = ds.batch(config.TRAIN.batch_size)
-    ds = ds.prefetch(buffer_size=1)
+    ds = ds.prefetch(buffer_size=3)
 
     iterator = ds.make_one_shot_iterator()
     one_element = iterator.get_next()
-    net, total_loss, log_tensors = make_model(*one_element, is_train=True, reuse=False)
+    net, total_loss, log_tensors = make_model(*one_element, is_train=True, train_bn=config.TRAIN.train_batch_norm, reuse=False)
     x_ = net.img  # net input
     last_conf = net.last_conf  # net output
     last_paf = net.last_paf  # net output
@@ -367,7 +421,7 @@ def parallel_train(training_dataset):
 
 
     global_step = tf.Variable(1, trainable=False)
-    # TODO
+    # TODO Horovod: scale the learning rate linearly 
     # scaled_lr = lr_init * hvd.size()  # Horovod: scale the learning rate linearly 
     scaled_lr = lr_init  # Linear scaling rule is not working in openpose training.
     with tf.variable_scope('learning_rate'):
@@ -408,13 +462,15 @@ def parallel_train(training_dataset):
             tf.summary.scalar('l2_loss', l2_loss)
 
             for ix, ll in enumerate(stage_losses):
-                tf.summary.scalar('stage{}_loss'.format(ix), ll)
+                tf.summary.scalar('stage{}_loss'.format(ix % 2 + 1), ll)
             merge = tf.summary.merge_all()
 
         #Init model and load weights
         init.run()
 
-        #TODO
+        print('Worker{}: Initialized'.format(hvd.rank()))
+
+        #TODO Horovod brodcast
         if hvd.rank() == 0:  # Horovod
             # restore pre-trained weights
             try:
@@ -431,7 +487,7 @@ def parallel_train(training_dataset):
                     print("no pre-trained mobilnet model")
 
         bcast.run()  # Horovod bcast vars across workers
-        print('Worker{}: Initialized'.format(hvd.rank()))
+        print('Worker{}: Weights initialized'.format(hvd.rank()))
         print('Worker{}: Start - n_step: {} batch_size: {} lr_init: {} lr_decay_every_step: {}'.format(
             hvd.rank(), n_step, config.TRAIN.batch_size, lr_init, lr_decay_every_step))
 
@@ -453,11 +509,11 @@ def parallel_train(training_dataset):
             # tstring = time.strftime('%d-%m %H:%M:%S', time.localtime(time.time()))
             lr = sess.run(lr_v)
             print(
-                'Worker{}: Total Loss at iteration {} / {} is: {} Learning rate {:10e} l2_loss {:10e} Took: {}s'.format(
+                'Worker_{}: Total Loss at iteration {} / {} is: {} Learning rate {:10e} l2_loss {:10e} Took: {}s'.format(
                     hvd.rank(), step, n_step, _loss, lr, _l2,
                     time.time() - tic))
             for ix, ll in enumerate(_stage_losses):
-                print('Worker{}:', hvd.rank(), 'Network#', ix, 'For Branch', ix % 2 + 1, 'Loss:', ll)
+                print('Worker_{}:'.format(hvd.rank()), 'Network#', ix, 'For Branch', ix % 2 + 1, 'Loss:', ll)
 
             # save intermediate results and model
             if hvd.rank() == 0:  # Horovod
@@ -467,14 +523,14 @@ def parallel_train(training_dataset):
                     [img_out, confs_ground, pafs_ground, conf_result, paf_result,
                      mask_out] = sess.run([x_, confs_, pafs_, last_conf, last_paf, mask])
                     draw_results(img_out, confs_ground, conf_result, pafs_ground, paf_result, mask_out,
-                                 'train_best_%d_' % step)
+                                 'train_best_{}_{}_'.format(step,_loss))
 
                     # save model
                     # tl.files.save_npz(
                     #    net.all_params, os.path.join(model_path, 'pose' + str(step) + '.npz'), sess=sess)
                     # tl.files.save_npz(net.all_params, os.path.join(model_path, 'pose.npz'), sess=sess)
                     tl.files.save_npz_dict(
-                        net.all_params, os.path.join(model_path, 'pose_best.npz'), sess=sess)
+                        net.all_params, os.path.join(model_path, 'pose_best_{}_{}_'.format(step,_loss)), sess=sess)
 
                 if tensorboard:
                     summ = sess.run(merge)
