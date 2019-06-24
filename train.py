@@ -72,33 +72,33 @@ def get_pose_data_list(im_path, ann_path):
         print("{} has {} images".format(im_path, len(imgs_file_list)))
     return imgs_file_list, objs_info_list, mask_list, targets
 
-
-def make_model(img, results, mask, is_train=True, reuse=False):
+#TODO rename the stage losses so it is more clear they are the branch losses
+def make_model(img, results, mask, is_train=True, train_bn = True, reuse=False):
     confs = results[:, :, :, :n_pos]
     pafs = results[:, :, :, n_pos:]
     m1 = tf_repeat(mask, [1, 1, 1, n_pos])
     m2 = tf_repeat(mask, [1, 1, 1, n_pos * 2])
 
-    cnn, b1_list, b2_list, net = model(img, n_pos, m1, m2, is_train, reuse)
+    cnn, b1_list, b2_list, net = model(img, n_pos, m1, m2, is_train, train_bn, reuse)
 
     # define loss
     losses = []
-    last_losses_l1 = []
-    last_losses_l2 = []
+    last_losses_b1 = []
+    last_losses_b2 = []
     stage_losses = []
 
-    for idx, (l1, l2) in enumerate(zip(b1_list, b2_list)):
-        loss_l1 = tf.nn.l2_loss((l1.outputs - confs) * m1)
-        loss_l2 = tf.nn.l2_loss((l2.outputs - pafs) * m2)
+    for idx, (b1, b2) in enumerate(zip(b1_list, b2_list)):
+        loss_b1 = tf.nn.l2_loss((b1.outputs - confs) * m1)
+        loss_b2 = tf.nn.l2_loss((b2.outputs - pafs) * m2)
 
-        losses.append(tf.reduce_mean([loss_l1, loss_l2]))
-        stage_losses.append(loss_l1 / config.TRAIN.batch_size)
-        stage_losses.append(loss_l2 / config.TRAIN.batch_size)
+        losses.append(tf.reduce_mean([loss_b1, loss_b2]))
+        stage_losses.append(loss_b1 / config.TRAIN.batch_size)
+        stage_losses.append(loss_b2 / config.TRAIN.batch_size)
 
     last_conf = b1_list[-1].outputs
     last_paf = b2_list[-1].outputs
-    last_losses_l1.append(loss_l1)
-    last_losses_l2.append(loss_l2)
+    last_losses_b1.append(loss_b1)
+    last_losses_b2.append(loss_b2)
     l2_loss = 0.0
 
     for p in tl.layers.get_variables_with_name('kernel', True, True):
