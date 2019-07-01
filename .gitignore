@@ -45,3 +45,4 @@ models/
 .vscode/
 eval/
 summaries/
+TensorRT-5.1.2.2/
