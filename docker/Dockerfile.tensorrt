@@ -8,8 +8,14 @@ ARG ML_REPO=nvidia-machine-learning-repo-ubuntu1604_1.0.0-1_amd64.deb
 ARG RT_REPO=nv-tensorrt-repo-ubuntu1604-cuda9.0-ga-trt4.0.1.6-20180612_1-1_amd64.deb
 
 ADD sources.list.ustc /etc/apt/sources.list
+
+RUN apt update && apt install -y \
+    wget \
+    apt-utils
+
 RUN apt update && apt install -y curl && \
     apt-key adv --fetch-keys http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1604/x86_64/7fa2af80.pub
+
 
 RUN curl -sLOJ ${NVIDIA_CUDA_PREFIX}/${CUDA_REPO} && \
     curl -sLOJ ${NVIDIA_ML_PREFIX}/${ML_REPO} && \
