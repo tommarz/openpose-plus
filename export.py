@@ -13,6 +13,8 @@ sys.path.append('.')
 from openpose_plus.inference.common import measure, rename_tensor
 from openpose_plus.models import get_model
 
+from train_config import config
+
 tf.logging.set_verbosity(tf.logging.DEBUG)
 tl.logging.set_verbosity(tl.logging.DEBUG)
 
@@ -40,7 +42,6 @@ def save_uff(sess, names, filename):
 
 
 def export_model(model_func, checkpoint_dir, path_to_npz, graph_filename, uff_filename):
-    mkdir_p(checkpoint_dir)
     model_parameters = model_func()
     names = [p.name[:-2] for p in model_parameters]
     print('name: %s' % ','.join(names))
@@ -50,6 +51,7 @@ def export_model(model_func, checkpoint_dir, path_to_npz, graph_filename, uff_fi
         measure(lambda: tl.files.load_and_assign_npz_dict(path_to_npz, sess), 'load npz')
 
         if graph_filename:
+            mkdir_p(checkpoint_dir)
             measure(lambda: save_graph(sess, checkpoint_dir, graph_filename), 'save_graph')
             measure(lambda: save_model(sess, checkpoint_dir), 'save_model')
 
@@ -60,29 +62,13 @@ def export_model(model_func, checkpoint_dir, path_to_npz, graph_filename, uff_fi
     for p in model_parameters:
         print('%s :: %s' % (p.name, p.shape))
 
-
-def parse_args():
-    parser = argparse.ArgumentParser(description='model exporter')
-    parser.add_argument('--base-model', type=str, default='', help='vgg | vggtiny | mobilenet', required=True)
-    parser.add_argument('--path-to-npz', type=str, default='', help='path to npz', required=True)
-    parser.add_argument('--checkpoint-dir', type=str, default='checkpoints', help='checkpoint dir')
-    parser.add_argument('--graph-filename', type=str, default='', help='graph filename')
-    parser.add_argument('--uff-filename', type=str, default='', help='uff filename')
-    parser.add_argument('--data-format', type=str, default='channels_last', help='channels_last | channels_first.')
-    parser.add_argument('--height', type=int, default='368', help='input height.')
-    parser.add_argument('--width', type=int, default='432', help='input width.')
-
-    return parser.parse_args()
-
-
 def main():
-    args = parse_args()
 
     def model_func():
-        target_size = (args.width, args.height)
-        return get_model(args.base_model)(target_size, args.data_format)
+        target_size = (config.MODEL.win, config.MODEL.hin)
+        return get_model(config.MODEL.name)(target_size, config.MODEL.data_format)
 
-    export_model(model_func, args.checkpoint_dir, args.path_to_npz, args.graph_filename, args.uff_filename)
+    export_model(model_func, config.EXPORT.checkpoint_dir, os.path.join(config.MODEL.model_path, config.EXPORT.model), config.EXPORT.graph_filename, config.EXPORT.uff_filename)
 
 
 if __name__ == '__main__':

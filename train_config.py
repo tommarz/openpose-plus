@@ -31,6 +31,8 @@ config.MODEL.name = 'hao28_experimental'  # vgg, vggtiny, mobilenet,hao28_experi
 config.MODEL.initial_weights = False  # True,False
 config.MODEL.initial_weights_file = 'mobilenet.npz'  # save file
 
+config.MODEL.data_format='channels_first' #'channels_last' or 'channels_first'
+
 
 if (config.MODEL.hin % 16 != 0) or (config.MODEL.win % 16 != 0):
     raise Exception("image size should be divided by 16")
@@ -51,3 +53,9 @@ config.EVAL.eval_path = 'eval'
 config.EVAL.data_idx = -1 # data_idx >= 0 to use specified data
 config.EVAL.eval_size = -1 # use first eval_size elements to evaluate, only when data_idx < 0
 config.EVAL.plot = False
+
+config.EXPORT = edict()
+config.EXPORT.model = 'pose_export.npz'
+config.EXPORT.graph_filename = None
+config.EXPORT.checkpoint_dir = None
+config.EXPORT.uff_filename = "{}_w{}xh{}.uff".format(config.MODEL.name,config.MODEL.win,config.MODEL.hin)
