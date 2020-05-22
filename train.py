@@ -570,23 +570,23 @@ if __name__ == '__main__':
     if 'custom' in config.DATA.train_data:
         ## read your own images contains valid people
         ## 1. if you only have one folder as follow:
-        ##   data/your_data
+        ##      data/your_data
         ##           /images
-        ##               0001.jpeg
+        ##              0001.jpeg
         ##               0002.jpeg
         ##           /coco.json
-        # your_imgs_file_list, your_objs_info_list, your_mask_list, your_targets = \
-        #     get_pose_data_list(config.DATA.your_images_path, config.DATA.your_annos_path)
+        your_imgs_file_list, your_objs_info_list, your_mask_list, your_targets = \
+             get_pose_data_list(config.DATA.your_images_path, config.DATA.your_annos_path)
         ## 2. if you have a folder with many folders: (which is common in industry)
-        folder_list = tl.files.load_folder_list(path='data/your_data')
-        your_imgs_file_list, your_objs_info_list, your_mask_list = [], [], []
-        for folder in folder_list:
-            _imgs_file_list, _objs_info_list, _mask_list, _targets = \
-                get_pose_data_list(os.path.join(folder, 'images'), os.path.join(folder, 'coco.json'))
-            print(len(_imgs_file_list))
-            your_imgs_file_list.extend(_imgs_file_list)
-            your_objs_info_list.extend(_objs_info_list)
-            your_mask_list.extend(_mask_list)
+        # folder_list = tl.files.load_folder_list(path='data/your_data')
+        # your_imgs_file_list, your_objs_info_list, your_mask_list = [], [], []
+        # for folder in folder_list:
+        #     _imgs_file_list, _objs_info_list, _mask_list, _targets = \
+        #         get_pose_data_list(os.path.join(folder, 'images'), os.path.join(folder, 'coco.json'))
+        #     print(len(_imgs_file_list))
+        #     your_imgs_file_list.extend(_imgs_file_list)
+        #     your_objs_info_list.extend(_objs_info_list)
+        #     your_mask_list.extend(_mask_list)
         print("number of own images found:", len(your_imgs_file_list))
 
     # choose dataset for training
@@ -613,7 +613,7 @@ if __name__ == '__main__':
             yield _input.encode('utf-8'), cPickle.dumps(_target)
 
     n_epoch = math.ceil(n_step / (len(imgs_file_list) / config.TRAIN.batch_size))
-    dataset = tf.data.Dataset().from_generator(generator, output_types=(tf.string, tf.string))
+    dataset = tf.data.Dataset.from_generator(generator, output_types=(tf.string, tf.string))
 
     if config.TRAIN.train_mode == 'single':
         single_train(dataset)
