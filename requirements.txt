@@ -4,6 +4,6 @@ setuptools>=36
 easydict>=1.8,<=1.10
 opencv-python>=3.4,<3.5
 tensorflow-gpu>=1.8.0,<=1.15
-tensorlayer>=1.11.1
+tensorlayer==1.11.1
 nltk>=3.3,<3.4
 # pycocotools  # must be installed after cython and numpy are installed
