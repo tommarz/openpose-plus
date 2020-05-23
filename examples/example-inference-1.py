@@ -9,6 +9,8 @@ import tensorflow as tf
 import tensorlayer as tl
 
 sys.path.append('../')
+sys.path.append('.')
+
 
 from openpose_plus.inference.common import measure, plot_humans, read_imgfile
 from openpose_plus.inference.estimator import TfPoseEstimator
